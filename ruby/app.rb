@@ -96,8 +96,14 @@ module Isuconp
         digest "#{password}:#{calculate_salt(account_name)}"
       end
 
-      def current_user
-        session[:current_user]
+      def get_session_user()
+        if session[:user]
+          db.prepare('SELECT * FROM `users` WHERE `id` = ?').execute(
+            session[:user][:id]
+          ).first
+        else
+          nil
+        end
       end
 
       def make_posts(results, all_comments: false)
@@ -152,20 +158,22 @@ module Isuconp
     end
 
     get '/login' do
-      if current_user
+      if get_session_user()
         redirect '/', 302
       end
       erb :login, layout: :layout, locals: { me: nil }
     end
 
     post '/login' do
-      if current_user
+      if get_session_user()
         redirect '/', 302
       end
 
       user = try_login(params['account_name'], params['password'])
       if user
-        session[:current_user] = user
+        session[:user] = {
+          id: user[:id]
+        }
         session[:csrf_token] = SecureRandom.hex(16)
         redirect '/', 302
       else
@@ -175,14 +183,14 @@ module Isuconp
     end
 
     get '/register' do
-      if current_user
+      if get_session_user()
         redirect '/', 302
       end
       erb :register, layout: :layout, locals: { me: nil }
     end
 
     post '/register' do
-      if current_user
+      if get_session_user()
         redirect '/', 302
       end
 
@@ -196,7 +204,7 @@ module Isuconp
         return
       end
 
-      user = db.prepare('SELECT * FROM users WHERE `account_name` = ?').execute(account_name).first
+      user = db.prepare('SELECT 1 FROM users WHERE `account_name` = ?').execute(account_name).first
       if user
         flash[:notice] = 'アカウント名がすでに使われています'
         redirect '/register', 302
@@ -209,7 +217,9 @@ module Isuconp
         calculate_passhash(account_name, password)
       )
 
-      session[:current_user] = user
+      session[:user] = {
+        id: db.last_id
+      }
       session[:csrf_token] = SecureRandom.hex(16)
       redirect '/', 302
     end
@@ -220,7 +230,7 @@ module Isuconp
     end
 
     get '/' do
-      me = current_user
+      me = get_session_user()
 
       results = db.query('SELECT `id`, `user_id`, `body`, `created_at`, `mime` FROM `posts` ORDER BY `created_at` DESC')
       posts = make_posts(results)
@@ -259,7 +269,7 @@ module Isuconp
         ).first[:count]
       end
 
-      me = current_user
+      me = get_session_user()
 
       erb :user, layout: :layout, locals: { posts: posts, user: user, post_count: post_count, comment_count: comment_count, commented_count: commented_count, me: me }
     end
@@ -284,13 +294,13 @@ module Isuconp
 
       post = posts[0]
 
-      me = current_user
+      me = get_session_user()
 
       erb :post, layout: :layout, locals: { post: post, me: me }
     end
 
     post '/' do
-      me = current_user
+      me = get_session_user()
 
       if me.nil?
         redirect '/login', 302
@@ -354,7 +364,7 @@ module Isuconp
     end
 
     post '/comment' do
-      me = current_user
+      me = get_session_user()
 
       if me.nil?
         redirect '/login', 302
@@ -380,7 +390,7 @@ module Isuconp
     end
 
     get '/admin/banned' do
-      me = current_user
+      me = get_session_user()
 
       if me.nil?
         redirect '/login', 302
@@ -396,7 +406,7 @@ module Isuconp
     end
 
     post '/admin/banned' do
-      me = current_user
+      me = get_session_user()
 
       if me.nil?
         redirect '/', 302
