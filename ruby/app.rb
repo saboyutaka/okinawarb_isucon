@@ -334,10 +334,16 @@ module Isuconp
         db.prepare(query).execute(
           me[:id],
           mime,
-          params["file"][:tempfile].read,
+          '',
           params["body"],
         )
         pid = db.last_id
+        img = params["file"][:tempfile].read
+
+        public_path = File.expand_path('../public/image', __dir__)
+        ext = mime.split('/').last
+        File.write(File.join(public_path, pid.to_s + "." + ext), img)
+        File.write(File.join(public_path, pid.to_s + ".jpg"), img) if ext == "jpeg"
 
         redirect "/posts/#{pid}", 302
       else
