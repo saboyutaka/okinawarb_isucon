@@ -98,12 +98,8 @@ module Isuconp
         digest "#{password}:#{calculate_salt(account_name)}"
       end
 
-      def get_session_user()
-        if session[:user]
-          db.xquery('SELECT * FROM `users` WHERE `id` = ?', session[:user][:id]).first
-        else
-          nil
-        end
+      def current_user
+        session[:current_user]
       end
 
       def update_post_cache post
@@ -182,22 +178,20 @@ module Isuconp
     end
 
     get '/login' do
-      if get_session_user()
+      if current_user
         redirect '/', 302
       end
       erb :login, layout: :layout, locals: { me: nil }
     end
 
     post '/login' do
-      if get_session_user()
+      if current_user
         redirect '/', 302
       end
 
       user = try_login(params['account_name'], params['password'])
       if user
-        session[:user]       = {
-          id: user[:id]
-        }
+        session[:current_user] = user
         session[:csrf_token] = SecureRandom.hex(16)
         redirect '/', 302
       else
@@ -207,14 +201,14 @@ module Isuconp
     end
 
     get '/register' do
-      if get_session_user()
+      if current_user
         redirect '/', 302
       end
       erb :register, layout: :layout, locals: { me: nil }
     end
 
     post '/register' do
-      if get_session_user()
+      if current_user
         redirect '/', 302
       end
 
@@ -228,7 +222,7 @@ module Isuconp
         return
       end
 
-      user = db.xquery('SELECT 1 FROM users WHERE `account_name` = ?', account_name).first
+      user = db.xquery('SELECT * FROM users WHERE `account_name` = ?', account_name).first
       if user
         flash[:notice] = 'アカウント名がすでに使われています'
         redirect '/register', 302
@@ -238,20 +232,18 @@ module Isuconp
       query = 'INSERT INTO `users` (`account_name`, `passhash`) VALUES (?,?)'
       db.xquery(query, account_name, calculate_passhash(account_name, password))
 
-      session[:user]       = {
-        id: db.last_id
-      }
+      session[:current_user] = try_login(account_name, password)
       session[:csrf_token] = SecureRandom.hex(16)
       redirect '/', 302
     end
 
     get '/logout' do
-      session.delete(:user)
+      session.delete(:current_user)
       redirect '/', 302
     end
 
     get '/' do
-      me = get_session_user()
+      me = current_user
       results = db.xquery('SELECT `posts`.`id`, `user_id`, `body`, `posts`.`created_at`, `mime` FROM `posts` inner join users on users.id = posts.user_id where users.del_flg = 0 ORDER BY `posts`.`created_at` DESC limit '+POSTS_PER_PAGE.to_s)
       posts = make_posts(results)
 
@@ -279,7 +271,7 @@ module Isuconp
         commented_count = db.xquery("SELECT COUNT(*) AS count FROM `comments` WHERE `post_id` IN (#{placeholder})", *post_ids).first[:count]
       end
 
-      me = get_session_user()
+      me = current_user
 
       erb :user, layout: :layout, locals: { posts: posts, user: user, post_count: post_count, comment_count: comment_count, commented_count: commented_count, me: me }
     end
@@ -307,13 +299,13 @@ module Isuconp
 
       post = posts[0]
 
-      me = get_session_user()
+      me = current_user
 
       erb :post, layout: :layout, locals: { post: post, me: me }
     end
 
     post '/' do
-      me = get_session_user()
+      me = current_user
 
       if me.nil?
         redirect '/login', 302
@@ -378,7 +370,7 @@ module Isuconp
     end
 
     post '/comment' do
-      me = get_session_user()
+      me = current_user
 
       if me.nil?
         redirect '/login', 302
@@ -403,7 +395,7 @@ module Isuconp
     end
 
     get '/admin/banned' do
-      me = get_session_user()
+      me = current_user
 
       if me.nil?
         redirect '/login', 302
@@ -419,7 +411,7 @@ module Isuconp
     end
 
     post '/admin/banned' do
-      me = get_session_user()
+      me = current_user
 
       if me.nil?
         redirect '/', 302
