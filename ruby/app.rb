@@ -8,6 +8,7 @@ require 'rack-mini-profiler'
 require 'flamegraph'
 require 'stackprof'
 require 'pry'
+require 'json'
 
 module Isuconp
   class App < Sinatra::Base
@@ -105,25 +106,57 @@ module Isuconp
         end
       end
 
+      def update_post_cache post
+        post[:body] = JSON.parse(post[:body])['body'] rescue post[:body]
+        count = post[:comment_count] = db.prepare('SELECT COUNT(*) AS `count` FROM `comments` WHERE `post_id` = ?').execute(
+          post[:id]
+        ).first[:count]
+        comment_ids = db.prepare('SELECT post_id, id FROM `comments` WHERE `post_id` = ? ORDER BY `created_at` DESC LIMIT 3').execute(post[:id]).map { |comment| comment[:id] }
+        body = { body: post[:body], comment_count: count, first_three: comment_ids }.to_json
+        db.prepare('UPDATE `posts` set body = ? where id = ?').execute(body, post[:id])
+        post[:comment_count] = count
+        post[:first_three] = comment_ids
+      end
+
+      def convert_post post
+        foo = JSON.parse post[:body]
+        post[:body] = foo['body']
+        post[:comment_count] = foo['comment_count']
+        post[:first_three] = foo['first_three']
+      rescue
+        update_post_cache post
+      end
+
       def make_posts(results, all_comments: false)
-        posts = []
-        results.to_a.each do |post|
-          post[:comment_count] = db.xquery('SELECT COUNT(*) AS `count` FROM `comments` WHERE `post_id` = ?', post[:id]).first[:count]
-
-          query = 'SELECT * FROM `comments` WHERE `post_id` = ? ORDER BY `created_at` DESC'
-          unless all_comments
-            query += ' LIMIT 3'
+        posts = results.map { |p| convert_post p; p }
+        if all_comments
+          post_ids = posts.map { |p| p[:id] }
+          if post_ids.empty?
+            comments = []
+          else
+            comments = db.prepare('SELECT * FROM `comments` WHERE `post_id` in ('+post_ids.join(',')+') ORDER BY `created_at` DESC').execute().to_a
           end
-          comments = db.xquery(query, post[:id]).to_a
-          comments.each do |comment|
-            comment[:user] = db.xquery('SELECT * FROM `users` WHERE `id` = ?', comment[:user_id]).first
+        else
+          comment_ids = posts.map { |p| p[:first_three] }.flatten
+          if comment_ids.empty?
+            comments = []
+          else
+            comments = db.prepare('SELECT * FROM `comments` WHERE `id` in ('+comment_ids.join(',')+') ORDER BY `created_at` DESC').execute().to_a
           end
-          post[:comments] = comments.reverse
+        end
+        user_ids = comments.map { |c| c[:user_id] }.uniq | posts.map { |p| p[:user_id] }
+        users = db.prepare('SELECT * from users where id in ('+user_ids.join(',')+')').execute().to_a
+        user_by_id = users.group_by { |u| u[:id] }.transform_values(&:first)
+        comments.each do |c|
+          c[:user] = user_by_id[c[:user_id]]
+          raise unless c[:user]
+        end
+        comments_by_post_id = comments.group_by { |c| c[:post_id] }
 
-          post[:user] = db.xquery('SELECT * FROM `users` WHERE `id` = ?', post[:user_id]).first
-
-          posts.push(post) if post[:user][:del_flg] == 0
-          break if posts.length >= POSTS_PER_PAGE
+        posts.to_a.each do |post|
+          post[:comments] = comments_by_post_id[post[:id]] || []
+          post[:user] = user_by_id[post[:user_id]]
+          raise unless post[:user]
         end
 
         posts
@@ -219,9 +252,8 @@ module Isuconp
 
     get '/' do
       me = get_session_user()
-
-      results = db.xquery('SELECT `id`, `user_id`, `body`, `created_at`, `mime` FROM `posts` ORDER BY `created_at` DESC')
-      posts   = make_posts(results)
+      results = db.xquery('SELECT `posts`.`id`, `user_id`, `body`, `posts`.`created_at`, `mime` FROM `posts` inner join users on users.id = posts.user_id where users.del_flg = 0 ORDER BY `posts`.`created_at` DESC limit '+POSTS_PER_PAGE.to_s)
+      posts = make_posts(results)
 
       erb :index, layout: :layout, locals: { posts: posts, me: me }
     end
@@ -356,6 +388,9 @@ module Isuconp
 
       query = 'INSERT INTO `comments` (`post_id`, `user_id`, `comment`) VALUES (?,?,?)'
       db.xquery(query, post_id, me[:id], params['comment'])
+
+      post = db.prepare('SELECT `id`, `body` FROM `posts` where id = ?').execute(params['post_id']).first
+      update_post_cache post
 
       redirect "/posts/#{post_id}", 302
     end
