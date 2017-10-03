@@ -146,7 +146,7 @@ module Isuconp
         end
         user_ids = comments.map { |c| c[:user_id] }.uniq | posts.map { |p| p[:user_id] }
         users = db.prepare('SELECT * from users where id in ('+user_ids.join(',')+')').execute().to_a
-        user_by_id = users.group_by { |u| u[:id] }.transform_values(&:first)
+        user_by_id = users.group_by { |u| u[:id] }.map { |id, us| [id, us.first] }.to_h
         comments.each do |c|
           c[:user] = user_by_id[c[:user_id]]
           raise unless c[:user]
