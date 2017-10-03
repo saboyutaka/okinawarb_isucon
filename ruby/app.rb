@@ -215,7 +215,7 @@ module Isuconp
     end
 
     get '/logout' do
-      session.delete(:current_user)
+      session.delete(:user)
       redirect '/', 302
     end
 
