@@ -286,7 +286,14 @@ module Isuconp
 
     get '/posts' do
       max_created_at = params['max_created_at']
-      results        = db.xquery('SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` WHERE `created_at` <= ? ORDER BY `created_at` DESC', max_created_at.nil? ? nil : Time.iso8601(max_created_at).localtime)
+      results        = db.xquery(
+        %(
+          SELECT `posts`.`id`, `user_id`, `body`, `mime`, `posts`.`created_at` FROM `posts`
+          inner join users on users.id = posts.user_id where users.del_flg = 0
+          and `posts`.`created_at` <= ? ORDER BY `posts`.`created_at` DESC LIMIT #{POSTS_PER_PAGE}
+        ),
+        max_created_at.nil? ? nil : Time.iso8601(max_created_at).localtime
+      )
       posts          = make_posts(results)
 
       erb :posts, layout: false, locals: { posts: posts }
