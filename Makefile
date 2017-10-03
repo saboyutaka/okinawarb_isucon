@@ -9,18 +9,16 @@ stop: ## Stop Server
 log: ## log Server
 	@sudo journalctl -u isu-ruby
 
-config: ## copy configs from repository to conf
-	@sudo cp ~/private_isu/webapp/conf/systemd/isu-ruby.service /etc/systemd/system/
-	@sudo cp ~/private_isu/webapp/conf/nginx/nginx.conf /etc/nginx/
-	@sudo cp ~/private_isu/webapp/conf/nginx/isucon.conf /etc/nginx/conf.d/
-	@sudo cp ~/private_isu/webapp/conf/mysql/my.cnf /etc/mysql/
-	@make -s restart
+restart: ## copy configs from repository to conf
+	@sudo cp ~/private_isu/webapp/config/nginx.conf /etc/nginx/
+	@sudo cp ~/private_isu/webapp/config/my.cnf /etc/mysql/
+	@make -s ruby-restart
 	@make -s nginx-restart
 	@make -s db-restart
 
-restart: ## Restart Server
+ruby-restart: ## Restart Server
 	@sudo systemctl daemon-reload
-	@cd webapp/ruby; bundle 1> /dev/null
+	@cd ruby; bundle 1> /dev/null
 	@sudo systemctl restart isu-ruby
 	@echo 'Restart isu-ruby'
 
