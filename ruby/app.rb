@@ -67,7 +67,7 @@ module Isuconp
       end
 
       def validate_user(account_name, password)
-        if !(/\A[0-9a-zA-Z_]{3,}\z/.match(account_name) && /\A[0-9a-zA-Z_]{6,}\z/.match(password))
+        if !(/\A[0-9a-zA-Z_]{3,}\z/ =~ account_name && /\A[0-9a-zA-Z_]{6,}\z/ =~ password)
           return false
         end
 
@@ -365,7 +365,7 @@ module Isuconp
         return 422
       end
 
-      unless /\A[0-9]+\z/.match(params['post_id'])
+      unless /\A[0-9]+\z/ =~ params['post_id']
         return 'post_idは整数のみです'
       end
       post_id = params['post_id']
