@@ -108,12 +108,10 @@ module Isuconp
 
       def update_post_cache post
         post[:body] = JSON.parse(post[:body])['body'] rescue post[:body]
-        count = post[:comment_count] = db.prepare('SELECT COUNT(*) AS `count` FROM `comments` WHERE `post_id` = ?').execute(
-          post[:id]
-        ).first[:count]
-        comment_ids = db.prepare('SELECT post_id, id FROM `comments` WHERE `post_id` = ? ORDER BY `created_at` DESC LIMIT 3').execute(post[:id]).map { |comment| comment[:id] }
+        count = post[:comment_count] = db.xquery('SELECT COUNT(*) AS `count` FROM `comments` WHERE `post_id` = ?', post[:id]).first[:count]
+        comment_ids = db.xquery('SELECT post_id, id FROM `comments` WHERE `post_id` = ? ORDER BY `created_at` DESC LIMIT 3', post[:id]).map { |comment| comment[:id] }
         body = { body: post[:body], comment_count: count, first_three: comment_ids }.to_json
-        db.prepare('UPDATE `posts` set body = ? where id = ?').execute(body, post[:id])
+        db.xquery('UPDATE `posts` set body = ? where id = ?', body, post[:id])
         post[:comment_count] = count
         post[:first_three] = comment_ids
       end
@@ -134,19 +132,21 @@ module Isuconp
           if post_ids.empty?
             comments = []
           else
-            comments = db.prepare('SELECT * FROM `comments` WHERE `post_id` in ('+post_ids.join(',')+') ORDER BY `created_at` DESC').execute().to_a
+            comments = db.xquery('SELECT * FROM `comments` WHERE `post_id` in ('+post_ids.join(',')+') ORDER BY `created_at` DESC').to_a
           end
         else
           comment_ids = posts.map { |p| p[:first_three] }.flatten
           if comment_ids.empty?
             comments = []
           else
-            comments = db.prepare('SELECT * FROM `comments` WHERE `id` in ('+comment_ids.join(',')+') ORDER BY `created_at` DESC').execute().to_a
+            comments = db.xquery('SELECT * FROM `comments` WHERE `id` in ('+comment_ids.join(',')+') ORDER BY `created_at` DESC').to_a
           end
         end
         user_ids = comments.map { |c| c[:user_id] }.uniq | posts.map { |p| p[:user_id] }
-        users = db.prepare('SELECT * from users where id in ('+user_ids.join(',')+')').execute().to_a
+        
+        users = db.xquery('SELECT * from users where id in ('+user_ids.join(',')+')').to_a
         user_by_id = users.group_by { |u| u[:id] }.map { |id, us| [id, us.first] }.to_h
+
         comments.each do |c|
           c[:user] = user_by_id[c[:user_id]]
           raise unless c[:user]
@@ -389,7 +389,7 @@ module Isuconp
       query = 'INSERT INTO `comments` (`post_id`, `user_id`, `comment`) VALUES (?,?,?)'
       db.xquery(query, post_id, me[:id], params['comment'])
 
-      post = db.prepare('SELECT `id`, `body` FROM `posts` where id = ?').execute(params['post_id']).first
+      post = db.xquery('SELECT `id`, `body` FROM `posts` where id = ?', params['post_id']).first
       update_post_cache post
 
       redirect "/posts/#{post_id}", 302
