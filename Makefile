@@ -20,7 +20,7 @@ config: ## copy configs from repository to conf
 
 restart: ## Restart Server
 	@sudo systemctl daemon-reload
-	@cd webapp/ruby; bundle 1> /dev/null
+	@cd ruby; bundle 1> /dev/null
 	@sudo systemctl restart isu-ruby
 	@echo 'Restart isu-ruby'
 
