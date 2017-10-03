@@ -55,12 +55,10 @@ module Isuconp
       end
 
       def try_login(account_name, password)
-        user = db.prepare('SELECT * FROM users WHERE account_name = ? AND del_flg = 0').execute(account_name).first
+        user = db.prepare('SELECT account_name, passhash FROM users WHERE account_name = ? AND del_flg = 0').execute(account_name).first
 
         if user && calculate_passhash(user[:account_name], password) == user[:passhash]
           return user
-        elsif user
-          return nil
         else
           return nil
         end
