@@ -30,7 +30,7 @@ def db
 end
 
 
-public_path = File.expand_path('~/private_isu/webapp/public/image')
+public_path = File.expand_path('../public/image')
 FileUtils.mkdir_p(public_path)
 image_ids = db.prepare('SELECT id FROM `posts`').execute().map {|p| p[:id] }
 image_ids.each do |id|

@@ -60,6 +60,7 @@ module Isuconp
         sql.each do |s|
           db.prepare(s).execute
         end
+        Dir['../public/image/*'].select {|path| path.scan(/\d+/)[0].to_i > 10000 }.each{|path| FileUtils.rm(path) }
       end
 
       def try_login(account_name, password)
