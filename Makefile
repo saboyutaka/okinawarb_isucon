@@ -11,6 +11,7 @@ log: ## log Server
 
 restart: ## copy configs from repository to conf
 	@sudo cp ~/private_isu/webapp/config/nginx.conf /etc/nginx/
+	@sudo /usr/sbin/nginx -t
 	@sudo cp ~/private_isu/webapp/config/my.cnf /etc/mysql/
 	@make -s ruby-restart
 	@make -s nginx-restart
