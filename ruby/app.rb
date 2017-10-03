@@ -97,31 +97,51 @@ module Isuconp
         end
       end
 
+      def cache key
+        @@cache ||= {}
+        time, cached = @@cache[key]
+        if !time || time < Time.now - 10
+          cached = yield
+          p :load
+          @@cache[key] = [Time.now, cached]
+        else
+          p :cached
+        end
+        cached
+      end
+
       def make_posts(results, all_comments: false)
         posts = []
         results.to_a.each do |post|
-          post[:comment_count] = db.prepare('SELECT COUNT(*) AS `count` FROM `comments` WHERE `post_id` = ?').execute(
-            post[:id]
-          ).first[:count]
-
-          query = 'SELECT * FROM `comments` WHERE `post_id` = ? ORDER BY `created_at` DESC'
-          unless all_comments
-            query += ' LIMIT 3'
+          post[:comment_count] = cache [:count, post[:id]] do
+            db.prepare('SELECT COUNT(*) AS `count` FROM `comments` WHERE `post_id` = ?').execute(
+              post[:id]
+            ).first[:count]
           end
-          comments = db.prepare(query).execute(
-            post[:id]
-          ).to_a
+
+          comments = cache [:comments, post[:id], all_comments] do
+            query = 'SELECT * FROM `comments` WHERE `post_id` = ? ORDER BY `created_at` DESC'
+            unless all_comments
+              query += ' LIMIT 3'
+            end
+            db.prepare(query).execute(
+              post[:id]
+            ).to_a
+          end
           comments.each do |comment|
-            comment[:user] = db.prepare('SELECT * FROM `users` WHERE `id` = ?').execute(
-              comment[:user_id]
-            ).first
+            comment[:user] = cache [:user, comment[:user_id]] do
+              db.prepare('SELECT * FROM `users` WHERE `id` = ?').execute(
+                comment[:user_id]
+              ).first
+            end
           end
           post[:comments] = comments.reverse
 
-          post[:user] = db.prepare('SELECT * FROM `users` WHERE `id` = ?').execute(
-            post[:user_id]
-          ).first
-
+          post[:user] = cache [:user, post[:user_id]] do
+            db.prepare('SELECT * FROM `users` WHERE `id` = ?').execute(
+              post[:user_id]
+            ).first
+          end
           posts.push(post) if post[:user][:del_flg] == 0
           break if posts.length >= POSTS_PER_PAGE
         end
@@ -223,7 +243,7 @@ module Isuconp
     get '/' do
       me = get_session_user()
 
-      results = db.query('SELECT `id`, `user_id`, `body`, `created_at`, `mime` FROM `posts` ORDER BY `created_at` DESC')
+      results = db.query('SELECT `posts`.`id`, `user_id`, `body`, `posts`.`created_at`, `mime` FROM `posts` inner join users on users.id = posts.user_id where users.del_flg = 0 ORDER BY `posts`.`created_at` DESC limit '+POSTS_PER_PAGE.to_s)
       posts = make_posts(results)
 
       erb :index, layout: :layout, locals: { posts: posts, me: me }
