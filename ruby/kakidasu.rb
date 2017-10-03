@@ -1,4 +1,5 @@
 require 'mysql2'
+require 'fileutils'
 
 def config
   @config ||= {
@@ -29,7 +30,8 @@ def db
 end
 
 
-public_path = File.expand_path('~/private_isu/webapp/public/img')
+public_path = File.expand_path('~/private_isu/webapp/public/image')
+FileUtils.mkdir_p(public_path)
 image_ids = db.prepare('SELECT id FROM `posts`').execute().map {|p| p[:id] }
 image_ids.each do |id|
   img = db.prepare('SELECT * FROM `posts` WHERE `id` = ?').execute(id).first
